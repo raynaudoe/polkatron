@@ -1,0 +1,94 @@
+services:
+  dev:
+    build:
+      context: ..  # project root
+      dockerfile: docker/dev.Dockerfile
+      args:
+        - ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL}
+        - ANTHROPIC_AUTH_TOKEN=${ANTHROPIC_AUTH_TOKEN}
+    container_name: sdk-upgrader-dev
+    stdin_open: true        # docker run -i
+    tty: true               # docker run -t
+    volumes:
+      - ../..:/workspace:rw    # mount full repo
+    env_file:
+      - .env
+    environment:
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - SERENA_MCP_URL=http://serena:9121  # Connect to Serena service
+      # Claude Code timeout configurations
+      - API_TIMEOUT_MS=300000
+      - MCP_TIMEOUT=300000
+      - MCP_TOOL_TIMEOUT=600000
+      - BASH_DEFAULT_TIMEOUT_MS=600000
+      - BASH_MAX_TIMEOUT_MS=1800000
+    working_dir: /workspace
+    command: /bin/bash           # open interactive shell by default
+    entrypoint: ["/usr/local/bin/init-mcp.sh"]  # Initialize unified MCP config
+    # Expose common node ports; change as needed during development
+    ports:
+      - "9944:9944"
+      - "30333:30333"
+      - "30334:30334"
+      - "9615:9615"
+    depends_on:
+      - serena
+    networks:
+      - sdk-network
+  
+  serena:
+    build:
+      context: .
+      dockerfile: serena.Dockerfile
+    container_name: serena-mcp
+    environment:
+      - SERENA_DOCKER=1
+      - RUST_LOG=warn
+      # Performance optimizations
+      - SERENA_CACHE_ENABLED=true
+      - SERENA_PARALLEL_TOOLS=true
+      - SERENA_MAX_WORKERS=4
+      # Language server config
+      - SERENA_LSP_TIMEOUT=60
+      - SERENA_LSP_CACHE_SIZE=1000
+      # Polkadot SDK specific
+      - CARGO_TARGET_DIR=/workspace/target
+      - CARGO_INCREMENTAL=1
+    volumes:
+      - ../..:/workspace:rw    # Mount workspace read-write for Serena (needed for rust-analyzer)
+      - ../../.serena:/workspace/.serena:rw  # Mount workspace Serena config
+      - target-cache:/workspace/target  # Persist compilation artifacts
+      - serena-cache:/root/.serena  # Persistent cache (note: root user now)
+      - cargo-cache:/root/.cargo/registry  # Cache cargo registry
+      - cargo-git:/root/.cargo/git  # Cache cargo git deps
+      - rustup-cache:/root/.rustup  # Cache rustup components
+    ports:
+      - "9121:9121"      # MCP SSE server
+    command: >
+      uv run --directory . serena start-mcp-server 
+      --transport sse 
+      --port 9121 
+      --project /workspace
+      --context ide-assistant
+      --mode editing
+      --mode no-onboarding
+    networks:
+      - sdk-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9121/sse"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  sdk-network:
+    driver: bridge
+
+volumes:
+  serena-cache:
+  cargo-cache:
+  cargo-git:
+  rustup-cache:
+  target-cache:

@@ -1,0 +1,33 @@
+# Generated outputs
+output/
+
+# Scout resources - downloaded/generated dynamically
+resources/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Temporary files
+*.tmp
+*.log
+*.bak
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# Environment files
+.env
+.env.*
+*.env
