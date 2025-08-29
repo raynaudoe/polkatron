@@ -1,0 +1,47 @@
+{
+  "name": "@polkatron/sdk-upgrader-mcp",
+  "version": "1.0.0",
+  "description": "Self-contained MCP server for Polkadot SDK upgrades via Claude Code CLI",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "sdk-upgrader-mcp": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "bun build src/index.ts --target node --outdir dist",
+    "dev": "bun run --watch src/index.ts",
+    "start": "bun run dist/index.js",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "test:coverage": "bun test --coverage",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "bun run clean && bun run build"
+  },
+  "keywords": [
+    "mcp",
+    "polkadot",
+    "sdk",
+    "upgrader",
+    "claude"
+  ],
+  "author": "Polkatron",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.17.4",
+    "dotenv": "^16.3.1",
+    "winston": "^3.11.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/bun": "latest",
+    "typescript": "^5.3.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ]
+}

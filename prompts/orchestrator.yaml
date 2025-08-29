@@ -96,14 +96,22 @@ states:
       - max_iterations_reached: ERROR_REPORT
 
   EXECUTE:
-    desc: Process error groups sequentially
+    desc: Process error groups sequentially with mandatory verification
     actions:
       - find_next: |
           Get first error group with status = "pending":
           jq -r '.error_groups[] | select(.status == "pending") | .id' "$STATUS_FILE" | head -1
+      - verify_if_none: |
+          If no pending group:
+            - MANDATORY: Run $PROJECT_ROOT/scripts/check_build.sh
+            - Parse results with error_grouper
+            - Update $STATUS_FILE with NEW error groups if any exist
+            - NEVER assume success based on subagent reports alone
     conditions:
-      - has_group: SPAWN
-      - all_complete: CHECK_ERRORS
+      - has_next_group: SPAWN
+      - all_groups_processed_and_build_check_passes: UPDATE
+      - all_groups_processed_but_build_check_fails: |
+          Reset completed_groups=0, then go to CHECK_ERRORS
 
   SPAWN:
     desc: Launch sub-agent for error group
@@ -124,18 +132,26 @@ states:
     next: UPDATE
 
   UPDATE:
-    desc: Update group status after agent completion
+    desc: Update group status after agent completion and verify build (MANDATORY)
     actions:
-      - update_group_status: |
-          Mark current group as "completed" or "failed":
+      - update_group_status_if_present: |
+          If [current_group_id] is defined, mark it as "completed" or "failed":
           jq '.error_groups |= map(if .id == "[current_group_id]" then .status = "completed" else . end)' "$STATUS_FILE" > /tmp/status_temp && mv /tmp/status_temp "$STATUS_FILE"
-      - increment_completed: |
-          jq '.completed_groups += 1' "$STATUS_FILE" > /tmp/status_temp && mv /tmp/status_temp "$STATUS_FILE"
-      - log_progress: |
-          completed=$(jq '.completed_groups' "$STATUS_FILE")
-          total=$(jq '.error_groups | length' "$STATUS_FILE")
-          Log "Progress: $completed/$total groups completed"
-    next: EXECUTE
+      - increment_completed_if_present: |
+          If [current_group_id] is defined:
+            jq '.completed_groups += 1' "$STATUS_FILE" > /tmp/status_temp && mv /tmp/status_temp "$STATUS_FILE"
+      - verify_build: |
+          MANDATORY: Run $PROJECT_ROOT/scripts/check_build.sh
+          Parse results with error_grouper and update $STATUS_FILE with NEW error groups if any exist
+          NEVER assume success based on subagent reports alone
+      - loop_protection: |
+          If errors still exist after verification:
+            - Archive current groups into completed_error_groups
+            - Add new error groups discovered by verification
+            - Reset completed_groups to 0
+    conditions:
+      - has_errors: CHECK_ERRORS
+      - no_errors: TEST_WORKSPACE
 
   TEST_WORKSPACE:
     desc: Start test-fixing phase (MANDATORY - never skip this phase)

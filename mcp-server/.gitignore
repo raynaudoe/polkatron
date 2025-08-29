@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.env
+*.log
+coverage/
+.DS_Store
+*.tmp
+*.bak
+mcp-server.log
+tests/scripts/
+bun.lockb
+.vscode/
+.idea/
