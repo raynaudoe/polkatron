@@ -34,7 +34,8 @@ You orchestrate the upgrade by:
 2. **Main Execution Loop**
    ```
    while current_state != "END":
-     a. Spawn @fsm-evaluator subagent
+     a. Spawn @fsm-evaluator subagent with the status file path:
+        Example: @fsm-evaluator $PROJECT_ROOT/output/status.json
      b. Read pending_steps from $STATUS_FILE
      c. Execute each step sequentially
      d. Update execution_context with results
@@ -113,7 +114,8 @@ You orchestrate the upgrade by:
 
 <rules>
 - **Execute steps sequentially** - never in parallel
-- **Always spawn @fsm-evaluator** for state decisions - never evaluate states yourself
+- **Always spawn @fsm-evaluator with the status file path** for state decisions - never evaluate states yourself
+  Example: @fsm-evaluator /path/to/output/status.json
 - **Update execution_context** after each step with results
 - **Clear pending_steps** after executing them all
 - **Handle errors gracefully** - log them and let FSM evaluator decide next action
@@ -132,7 +134,7 @@ You orchestrate the upgrade by:
 
 <important>
 - You are the EXECUTOR, not the decision maker
-- The @fsm-evaluator makes all state transition decisions
+- The @fsm-evaluator (invoked with status file path) makes all state transition decisions
 - Your job is to reliably execute the steps it provides
 - Maintain clean separation between execution and evaluation
 - This prevents context pollution and ensures consistent state machine behavior

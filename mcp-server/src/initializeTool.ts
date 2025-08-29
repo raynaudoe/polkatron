@@ -1,7 +1,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import winston from 'winston';
-import { FSM_EVALUATOR_AGENT } from './fsmEvaluatorPrompt.js';
 
 // Bundled subagent definitions
 const POLKADOT_BUG_FIXER = `---
@@ -526,17 +525,39 @@ export class InitializeTool {
       }
 
       // Write subagent files
-      const agents = [
+      const bundledAgents = [
         { name: 'polkadot-bug-fixer.md', content: POLKADOT_BUG_FIXER },
-        { name: 'polkadot-tests-fixer.md', content: POLKADOT_TESTS_FIXER },
-        { name: 'fsm-evaluator.md', content: FSM_EVALUATOR_AGENT }
+        { name: 'polkadot-tests-fixer.md', content: POLKADOT_TESTS_FIXER }
       ];
 
-      for (const agent of agents) {
+      for (const agent of bundledAgents) {
         const agentPath = path.join(projectPath, '.claude/agents', agent.name);
         await fs.writeFile(agentPath, agent.content, 'utf-8');
         created.push(`AGENT: .claude/agents/${agent.name}`);
         this.logger.info(`Created agent: ${agent.name}`);
+      }
+
+      // Copy fsm-evaluator from local agents directory
+      const fsmEvaluatorSource = path.join(process.cwd(), 'agents', 'fsm-evaluator.md');
+      const fsmEvaluatorDest = path.join(projectPath, '.claude/agents', 'fsm-evaluator.md');
+      try {
+        const fsmContent = await fs.readFile(fsmEvaluatorSource, 'utf-8');
+        await fs.writeFile(fsmEvaluatorDest, fsmContent, 'utf-8');
+        created.push('AGENT: .claude/agents/fsm-evaluator.md');
+        this.logger.info('Copied fsm-evaluator.md from agents directory');
+      } catch (error) {
+        this.logger.warn('Could not copy fsm-evaluator.md from agents directory, using fallback content');
+        // Fallback: create a basic fsm-evaluator if source doesn't exist
+        const fallbackContent = `---
+name: fsm-evaluator
+description: FSM state evaluator for SDK upgrade
+---
+
+# FSM State Evaluator
+
+Please ensure agents/fsm-evaluator.md exists in the project root.`;
+        await fs.writeFile(fsmEvaluatorDest, fallbackContent, 'utf-8');
+        created.push('AGENT: .claude/agents/fsm-evaluator.md (fallback)');
       }
 
       // Write resource files
@@ -601,9 +622,13 @@ resources/error_recovery_handbook.md
       created.push('FILE: .gitignore');
       this.logger.info('Created .gitignore in project root');
 
+      // Set environment variable for the project path
+      process.env.SDK_UPGRADE_PROJECT_PATH = projectPath;
+      this.logger.info(`Set SDK_UPGRADE_PROJECT_PATH environment variable to: ${projectPath}`);
+
       return {
         success: true,
-        message: `Project initialized successfully at ${projectPath}`,
+        message: `Project initialized successfully at ${projectPath}\nEnvironment variable SDK_UPGRADE_PROJECT_PATH set to: ${projectPath}`,
         created
       };
 

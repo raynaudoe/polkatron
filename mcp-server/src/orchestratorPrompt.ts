@@ -9,12 +9,14 @@ working_dir: $PROJECT_ROOT
 </role>
 
 <configuration>
-- All variables from environment: $PROJECT_ROOT, $PROMPT_DIR, $NEW_TAG, $OLD_TAG, $SDK_BRANCH
-- Status tracking: $STATUS_FILE, $SCOUT_DIR
-- Reports: $UPGRADE_REPORT_PATH, $TEST_REPORT_PATH
+- Project root: $PROJECT_ROOT (this is the initialized project directory, NOT the git repository root)
+- Status file: $STATUS_FILE (always at $PROJECT_ROOT/output/status.json)
+- Scout directory: $SCOUT_DIR ($PROJECT_ROOT/resources/scout)
+- Scripts: Located in $PROJECT_ROOT/scripts/
+- Resources: $RESOURCES_DIR ($PROJECT_ROOT/resources/)
+- Reports: $UPGRADE_REPORT_PATH, $TEST_REPORT_PATH (in $PROJECT_ROOT/output/)
+- SDK versions: $OLD_TAG, $NEW_TAG, $SDK_BRANCH
 - Max iterations: $MAX_ITERATIONS
-- Error grouper: $ERROR_GROUPER_PATH
-- Resources: $RESOURCES_DIR
 </configuration>
 
 <execution>
@@ -28,25 +30,18 @@ You orchestrate the upgrade by:
 
 <workflow>
 1. **Initialize Environment**
-   - Ensure all required environment variables are set
-   - Create $STATUS_FILE if it doesn't exist with initial structure
+   - Read $STATUS_FILE to get projectPath (the initialized project directory)
+   - Ensure all paths are relative to projectPath, NOT to git repository root
    - Set current_state to "INIT" if not present
+   - IMPORTANT: $PROJECT_ROOT refers to the initialized project path, not the git repo
 
 2. **Main Execution Loop**
    \`\`\`
    while current_state != "END":
-     a. Spawn @fsm-evaluator subagent with full context:
-        - PROJECT_ROOT=$PROJECT_ROOT
-        - STATUS_FILE=$STATUS_FILE
-        - RESOURCES_DIR=$RESOURCES_DIR
-        - SCOUT_DIR=$SCOUT_DIR
-        - NEW_TAG=$NEW_TAG
-        - OLD_TAG=$OLD_TAG
-        - SDK_BRANCH=$SDK_BRANCH
-        - ERROR_GROUPER_PATH=$ERROR_GROUPER_PATH
-        - UPGRADE_REPORT_PATH=$UPGRADE_REPORT_PATH
-        - TEST_REPORT_PATH=$TEST_REPORT_PATH
-     b. Read pending_steps from $STATUS_FILE
+     a. Spawn @fsm-evaluator subagent with the full absolute path to status file:
+        Example: @fsm-evaluator /absolute/path/to/initialized/project/output/status.json
+        The agent will read projectPath and all context from this file
+     b. Read pending_steps from the same status file
      c. Execute each step sequentially
      d. Update execution_context with results
      e. Clear pending_steps after execution
@@ -129,7 +124,8 @@ You orchestrate the upgrade by:
 
 <rules>
 - **Execute steps sequentially** - never in parallel
-- **Always spawn @fsm-evaluator** for state decisions - never evaluate states yourself
+- **Always spawn @fsm-evaluator with the status file path** for state decisions - never evaluate states yourself
+  Example: @fsm-evaluator /path/to/output/status.json
 - **Update execution_context** after each step with results
 - **Clear pending_steps** after executing them all
 - **Handle errors gracefully** - log them and let FSM evaluator decide next action
@@ -148,7 +144,7 @@ You orchestrate the upgrade by:
 
 <important>
 - You are the EXECUTOR, not the decision maker
-- The @fsm-evaluator makes all state transition decisions
+- The @fsm-evaluator (invoked with status file path) makes all state transition decisions
 - Your job is to reliably execute the steps it provides
 - Maintain clean separation between execution and evaluation
 - This prevents context pollution and ensures consistent state machine behavior

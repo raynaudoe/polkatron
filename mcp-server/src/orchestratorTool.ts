@@ -16,10 +16,22 @@ export class OrchestratorTool {
     projectPath?: string;
   }): Promise<{ success: boolean; prompt?: string; config?: any; error?: string }> {
     try {
-      let projectPath = params.projectPath || process.cwd();
+      // Priority order for finding project path:
+      // 1. Explicit parameter
+      // 2. Environment variable SDK_UPGRADE_PROJECT_PATH
+      // 3. Check status.json in common locations
+      // 4. Default to process.cwd()
       
-      // Try to read projectPath from status.json if it exists
-      if (!params.projectPath) {
+      let projectPath = params.projectPath;
+      
+      // Check environment variable if no explicit path
+      if (!projectPath && process.env.SDK_UPGRADE_PROJECT_PATH) {
+        projectPath = process.env.SDK_UPGRADE_PROJECT_PATH;
+        this.logger.info(`Using project path from SDK_UPGRADE_PROJECT_PATH env: ${projectPath}`);
+      }
+      
+      // Try to read projectPath from status.json if still not found
+      if (!projectPath) {
         // Check common locations for status.json
         const possiblePaths = [
           path.join(process.cwd(), 'sdk-upgrade', 'output', 'status.json'),
@@ -78,13 +90,18 @@ export class OrchestratorTool {
 
       this.logger.info(`Prepared state machine executor for upgrade: ${params.oldTag} → ${params.newTag}`);
 
+      // Set environment variable for subagents to use
+      process.env.SDK_UPGRADE_PROJECT_PATH = projectPath;
+      this.logger.info(`Set SDK_UPGRADE_PROJECT_PATH for subagents: ${projectPath}`);
+
       // Return the prompt for Claude to execute in main context
       return {
         success: true,
         prompt: executorPrompt,
         config: {
-          instruction: `You are now the SDK Upgrade State Machine Executor. Follow the workflow defined above to upgrade from ${params.oldTag} to ${params.newTag}. You will spawn the @fsm-evaluator subagent repeatedly to determine state transitions and execute the pending steps it provides.`,
+          instruction: `You are now the SDK Upgrade State Machine Executor. Follow the workflow defined above to upgrade from ${params.oldTag} to ${params.newTag}. You will spawn the @fsm-evaluator subagent with the status file path: ${config.STATUS_FILE}`,
           projectPath,
+          statusFile: config.STATUS_FILE,
           oldTag: params.oldTag,
           newTag: params.newTag
         }
