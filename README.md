@@ -1,74 +1,196 @@
-# SDK Upgrader
+# 🚀 Polkatron SDK Upgrader
 
-Automated Polkadot SDK upgrade tool that uses AI agents to handle breaking changes and migration patterns.
+**Self-contained AI-powered Polkadot SDK upgrade automation** that intelligently handles breaking changes, migration patterns, and iterative error resolution through specialized agents and finite state machine orchestration.
 
-## Overview
+## ✨ Key Innovations
 
-The SDK Upgrader automates the complex process of upgrading Polkadot SDK dependencies by:
-- Analyzing release notes and PR changes
-- Applying known migration patterns
-- Fixing compilation errors iteratively
-- Updating tests to match new APIs
+### 🧠 Nested Subagent Problem Solver
+- **Revolutionary MCP Architecture**: Solves Claude's nested subagent limitation through bundled prompt execution
+- **Main Context Execution**: Orchestrator runs in Claude's primary context, enabling full subagent spawning capabilities
+- **Zero External Dependencies**: Self-contained with all prompts, agents, and scripts bundled
 
-## How It Works
+### 🤖 Intelligent Agent Collaboration
+- **Specialized Agents**: Domain-specific agents for compilation errors, test failures, and state evaluation
+- **Knowledge Transfer**: Shared error recovery handbook grows with each successful fix
+- **Confidence Scoring**: Each fix includes confidence metrics and validation
+
+### 🎯 FSM-Driven Orchestration
+- **State Machine Control**: Deterministic workflow management with clear state transitions
+- **Error-Based Sequential Processing**: Intelligent error grouping and iterative resolution
+- **Progress Tracking**: Real-time status updates and comprehensive reporting
+
+## 📊 System Architecture
 
 ```mermaid
-graph TD
-    %% Scout Phase (runs before FSM)
-    SCOUT[Scout Phase<br/>./scripts/scout.sh] -->|PR artifacts| RESOURCES[Resources Directory<br/>scout/polkadot-sdk-NEW_TAG/]
-    
-    %% FSM States
-    START([Start FSM]) --> INIT{INIT<br/>Check status.json}
-    INIT -->|status exists| CHECK_ERRORS
-    INIT -->|no status| UPDATE_DEPS
-    
-    UPDATE_DEPS[UPDATE_DEPS<br/>Update Cargo.toml<br/>Create status.json] --> CHECK_ERRORS
-    
-    CHECK_ERRORS{CHECK_ERRORS<br/>Run check_build.sh<br/>Group errors} -->|has errors| EXECUTE
-    CHECK_ERRORS -->|no errors| TEST_WORKSPACE
-    CHECK_ERRORS -->|max iterations| ERROR_REPORT
-    
-    EXECUTE{EXECUTE<br/>Find next pending<br/>error group} -->|has group| SPAWN
-    EXECUTE -->|all complete| CHECK_ERRORS
-    
-    SPAWN[SPAWN<br/>Launch polkadot-bug-fixer<br/>for error group] --> UPDATE
-    
-    UPDATE[UPDATE<br/>Mark group complete<br/>Update progress] --> EXECUTE
-    
-    TEST_WORKSPACE[TEST_WORKSPACE<br/>Initialize test phase] --> CHECK_TESTS
-    
-    CHECK_TESTS{CHECK_TESTS<br/>Run cargo test<br/>Group failures} -->|has failures| EXECUTE_TEST_FIX
-    CHECK_TESTS -->|no failures| COMPLETE
-    CHECK_TESTS -->|max iterations| TEST_ERROR_REPORT
-    
-    EXECUTE_TEST_FIX{EXECUTE_TEST_FIX<br/>Find next pending<br/>test group} -->|has test group| SPAWN_TEST_FIXER
-    EXECUTE_TEST_FIX -->|all complete| CHECK_TESTS
-    
-    SPAWN_TEST_FIXER[SPAWN_TEST_FIXER<br/>Launch polkadot-tests-fixer<br/>for test group] --> UPDATE_TEST_STATUS
-    
-    UPDATE_TEST_STATUS[UPDATE_TEST_STATUS<br/>Mark test group complete<br/>Update progress] --> EXECUTE_TEST_FIX
-    
-    TEST_ERROR_REPORT[TEST_ERROR_REPORT<br/>Generate test<br/>error summary] --> ERROR_REPORT
-    
-    ERROR_REPORT[ERROR_REPORT<br/>Generate comprehensive<br/>error summary] --> END_STATE
-    
-    COMPLETE[COMPLETE<br/>Generate final<br/>upgrade report] --> END_STATE
-    
-    END_STATE([END])
-    
-    %% Error Recovery Handbook (shared knowledge)
-    EH[Error Recovery Handbook<br/>Shared Knowledge Base]
-    SPAWN -.->|agent reads/writes| EH
-    SPAWN_TEST_FIXER -.->|agent reads/writes| EH
-    
-    %% Styling
-    style EH stroke:#333,stroke-width:2px,stroke-dasharray: 5 5
-    style SCOUT fill:#e1f5e1
-    style RESOURCES fill:#e1f5e1
-    style ERROR_REPORT fill:#ffe1e1
-    style TEST_ERROR_REPORT fill:#ffe1e1
-    style COMPLETE fill:#e1ffe1
+graph TB
+    subgraph "🎯 User Interface"
+        CLI[Claude Code CLI<br/>with MCP Server]
+        TOOLS[MCP Tools<br/>initialize & sdk_upgrade]
+    end
+
+    subgraph "🚀 MCP Server Layer"
+        MCP[MCP Server<br/>@polkatron/sdk-upgrader-mcp]
+        INIT[Initialize Tool<br/>Project Setup]
+        UPGRADE[SDK Upgrade Tool<br/>Prompt Expander]
+        BUNDLED[Bundled Assets<br/>Prompts + Agents + Scripts]
+    end
+
+    subgraph "🧠 Claude Main Context"
+        ORCH[SDK Upgrade Orchestrator<br/>FSM Executor]
+        EVAL[FSM Evaluator Agent<br/>State Decisions]
+    end
+
+    subgraph "🔧 Specialized Agents"
+        BUG_FIXER[Polkadot Bug Fixer<br/>Compilation Errors]
+        TEST_FIXER[Polkadot Tests Fixer<br/>Test Failures]
+    end
+
+    subgraph "📚 Knowledge Base"
+        HANDBOOK[Error Recovery Handbook<br/>Growing Knowledge]
+        SCOUT[Scout Artifacts<br/>PR Data & Migrations]
+        REPORTS[Generated Reports<br/>Progress & Results]
+    end
+
+    subgraph "🏗️ Project Infrastructure"
+        CARGO[Cargo.toml<br/>Dependencies]
+        SCRIPTS[Build Scripts<br/>check_build.sh, error_grouper.py]
+        STATUS[Status Tracking<br/>status.json FSM State]
+    end
+
+    CLI --> TOOLS
+    TOOLS --> MCP
+    MCP --> INIT
+    MCP --> UPGRADE
+    INIT --> BUNDLED
+    UPGRADE --> BUNDLED
+
+    BUNDLED --> ORCH
+    ORCH --> EVAL
+    EVAL --> BUG_FIXER
+    EVAL --> TEST_FIXER
+
+    BUG_FIXER --> HANDBOOK
+    TEST_FIXER --> HANDBOOK
+    HANDBOOK --> BUG_FIXER
+    HANDBOOK --> TEST_FIXER
+
+    ORCH --> CARGO
+    ORCH --> SCRIPTS
+    ORCH --> STATUS
+
+    BUG_FIXER --> CARGO
+    TEST_FIXER --> CARGO
+
+    SCOUT --> BUG_FIXER
+    SCOUT --> TEST_FIXER
+
+    ORCH --> REPORTS
+    BUG_FIXER --> REPORTS
+    TEST_FIXER --> REPORTS
+
+    style CLI fill:#e1f5fe
+    style MCP fill:#f3e5f5
+    style ORCH fill:#fff3e0
+    style BUG_FIXER fill:#e8f5e8
+    style TEST_FIXER fill:#e8f5e8
+    style HANDBOOK fill:#fff8e1
 ```
+
+## 🔄 Complete Upgrade Workflow
+
+```mermaid
+stateDiagram-v2
+    [*] --> INIT
+    INIT --> CHECK_SCOUT: No status.json
+    INIT --> CHECK_ERRORS: Status exists
+
+    CHECK_SCOUT --> UPDATE_DEPS: Scout complete
+    UPDATE_DEPS --> CHECK_ERRORS: Dependencies updated
+
+    CHECK_ERRORS --> EXECUTE: Errors found
+    CHECK_ERRORS --> TEST_WORKSPACE: No errors
+    CHECK_ERRORS --> ERROR_REPORT: Max iterations
+
+    EXECUTE --> SPAWN: Has pending group
+    EXECUTE --> UPDATE: All groups complete
+
+    SPAWN --> UPDATE: Agent completes
+    UPDATE --> CHECK_ERRORS: Build verification
+
+    TEST_WORKSPACE --> CHECK_TESTS: Test phase initialized
+
+    CHECK_TESTS --> EXECUTE_TEST_FIX: Failures found
+    CHECK_TESTS --> COMPLETE: No failures
+    CHECK_TESTS --> TEST_ERROR_REPORT: Max iterations
+
+    EXECUTE_TEST_FIX --> SPAWN_TEST_FIXER: Has test group
+    EXECUTE_TEST_FIX --> CHECK_TESTS: All tests complete
+
+    SPAWN_TEST_FIXER --> UPDATE_TEST_STATUS: Test agent completes
+    UPDATE_TEST_STATUS --> EXECUTE_TEST_FIX: Status updated
+
+    TEST_ERROR_REPORT --> ERROR_REPORT: Test errors summarized
+    ERROR_REPORT --> [*]: Error report complete
+    COMPLETE --> [*]: Upgrade successful
+
+    note right of INIT
+        Initialize upgrade process
+        Check existing status
+    end note
+
+    note right of CHECK_SCOUT
+        Download PR artifacts
+        Analyze release notes
+        Extract migration patterns
+    end note
+
+    note right of UPDATE_DEPS
+        Update Cargo.toml
+        Set SDK branch
+        Create initial status
+    end note
+
+    note right of EXECUTE
+        Process error groups
+        sequentially with
+        mandatory verification
+    end note
+
+    note right of TEST_WORKSPACE
+        Start test-fixing phase
+        Reset test counters
+        Initialize test tracking
+    end note
+```
+
+## 🎯 Agent Specialization Matrix
+
+| Agent | Purpose | Input | Output | Knowledge Source |
+|-------|---------|-------|--------|------------------|
+| **FSM Evaluator** | State Machine Logic | `status.json` | `pending_steps[]` | Embedded FSM rules |
+| **Polkadot Bug Fixer** | Compilation Errors | Error groups | Fixed code + handbook | Scout PRs + handbook |
+| **Polkadot Tests Fixer** | Test Failures | Test groups | Fixed tests + handbook | Scout PRs + handbook |
+| **Orchestrator** | Workflow Control | FSM decisions | Agent spawns + commands | Variable expansion |
+
+## 📈 Key Features & Benefits
+
+### ⚡ Performance & Reliability
+- **Iterative Error Resolution**: Handles complex interdependent errors through sequential processing
+- **Mandatory Verification**: Every fix is validated through compilation before proceeding
+- **Loop Protection**: Detects when fixes introduce new errors and handles gracefully
+- **Maximum Iterations**: Prevents infinite loops with configurable iteration limits
+
+### 🧠 Intelligence & Learning
+- **Knowledge Accumulation**: Error recovery handbook grows with each successful upgrade
+- **Pattern Recognition**: Learns from previous fixes to suggest similar solutions
+- **Confidence Scoring**: Each fix includes confidence metrics for manual review guidance
+- **Evidence-Based Fixes**: Prioritizes solutions found in official PR artifacts
+
+### 🔧 Developer Experience
+- **Zero Configuration**: Self-contained with all required assets bundled
+- **Progress Transparency**: Real-time status tracking with detailed progress reports
+- **Comprehensive Reporting**: Multiple report types for different stakeholder needs
+- **Resume Capability**: Can resume interrupted upgrades from any state
 
 ### Key Components
 
