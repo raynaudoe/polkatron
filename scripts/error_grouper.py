@@ -127,29 +127,73 @@ def main():
     
     items = []
     try:
-        # First try: parse as a single JSON value (array or object)
+        # Cargo outputs NDJSON by default, so try that first
         with open(json_file, 'r') as f:
-            content = f.read()
-        try:
-            data = json.loads(content)
-            if isinstance(data, list):
-                items = data
-            elif isinstance(data, dict):
-                items = [data]
-            else:
+            # Try line-by-line parsing first (NDJSON - most common for cargo)
+            f.seek(0)
+            lines = f.readlines()
+            
+            # Handle empty file gracefully
+            if not lines:
                 items = []
-        except json.JSONDecodeError:
-            # Fall back to NDJSON: parse line by line, ignoring blank/invalid lines
-            items = []
-            for line in content.splitlines():
-                line = line.strip()
-                if not line:
-                    continue
+            # Check if it might be NDJSON (multiple lines with JSON objects)
+            elif len(lines) > 1:
+                # Try parsing first two lines as separate JSON objects
+                is_ndjson = False
                 try:
-                    obj = json.loads(line)
-                    items.append(obj)
-                except json.JSONDecodeError:
-                    continue
+                    json.loads(lines[0].strip())
+                    if len(lines) > 1 and lines[1].strip():
+                        json.loads(lines[1].strip())
+                    is_ndjson = True
+                except (json.JSONDecodeError, IndexError):
+                    pass
+                
+                if is_ndjson:
+                    # Parse as NDJSON
+                    for line in lines:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            obj = json.loads(line)
+                            items.append(obj)
+                        except json.JSONDecodeError:
+                            # Skip invalid lines
+                            continue
+                else:
+                    # Try parsing entire content as single JSON
+                    f.seek(0)
+                    content = f.read().strip()
+                    if content:
+                        try:
+                            data = json.loads(content)
+                            if isinstance(data, list):
+                                items = data
+                            elif isinstance(data, dict):
+                                items = [data]
+                        except json.JSONDecodeError:
+                            # Try NDJSON as fallback
+                            for line in content.splitlines():
+                                line = line.strip()
+                                if line:
+                                    try:
+                                        obj = json.loads(line)
+                                        items.append(obj)
+                                    except json.JSONDecodeError:
+                                        continue
+            else:
+                # Single line file
+                line = lines[0].strip()
+                if line:
+                    try:
+                        data = json.loads(line)
+                        if isinstance(data, list):
+                            items = data
+                        elif isinstance(data, dict):
+                            items = [data]
+                    except json.JSONDecodeError:
+                        # Try as NDJSON (single line)
+                        pass
     except Exception as e:
         print(json.dumps({'error': f'Failed to read JSON file: {e}'}))
         sys.exit(1)

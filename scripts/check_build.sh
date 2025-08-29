@@ -20,7 +20,8 @@ CARGO_EXIT_CODE=$?
 echo "📝 Messages saved to: $OUTPUT_FILE"
 
 if command -v jq >/dev/null 2>&1; then
-    ERROR_COUNT=$(jq -c 'select(.reason=="compiler-message" and .message.level=="error")' "$OUTPUT_FILE" 2>/dev/null | wc -l | tr -d ' ')
+    # Process NDJSON (newline-delimited JSON) - each line is a separate JSON object
+    ERROR_COUNT=$(jq -s '[.[] | select(.reason=="compiler-message" and .message.level=="error")] | length' "$OUTPUT_FILE" 2>/dev/null)
     if [ -n "$ERROR_COUNT" ]; then
         if [ "$ERROR_COUNT" -eq 0 ]; then
             echo "✅ No errors found - build successful"

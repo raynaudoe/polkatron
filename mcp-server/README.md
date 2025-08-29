@@ -230,7 +230,6 @@ mcp-server/
 ├── src/
 │   ├── index.ts              # MCP server entry point
 │   ├── orchestratorTool.ts   # Prompt expander and config builder
-│   ├── orchestratorPrompt.ts # Bundled orchestrator FSM prompt
 │   └── initializeTool.ts     # Project initialization with subagents
 ├── tests/
 │   └── orchestrator.test.ts  # Unit tests

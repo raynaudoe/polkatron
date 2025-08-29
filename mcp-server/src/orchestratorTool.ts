@@ -1,12 +1,13 @@
 import * as path from 'path';
+import * as fs from 'fs/promises';
 import winston from 'winston';
-import { ORCHESTRATOR_PROMPT } from './orchestratorPrompt.js';
+import { SDK_UPGRADE_ORCHESTRATOR_PROMPT } from './orchestratorPrompt.js';
 
 export class OrchestratorTool {
   constructor(private logger: winston.Logger) {}
 
   /**
-   * Returns the orchestrator prompt and configuration for Claude to execute
+   * Returns the state machine executor prompt and configuration for Claude to execute
    * in the main agent context (not as a subagent)
    */
   async execute(params: {
@@ -15,7 +16,31 @@ export class OrchestratorTool {
     projectPath?: string;
   }): Promise<{ success: boolean; prompt?: string; config?: any; error?: string }> {
     try {
-      const projectPath = params.projectPath || process.cwd();
+      let projectPath = params.projectPath || process.cwd();
+      
+      // Try to read projectPath from status.json if it exists
+      if (!params.projectPath) {
+        // Check common locations for status.json
+        const possiblePaths = [
+          path.join(process.cwd(), 'sdk-upgrade', 'output', 'status.json'),
+          path.join(process.cwd(), 'output', 'status.json'),
+          path.join(process.cwd(), '..', 'sdk-upgrade', 'output', 'status.json')
+        ];
+        
+        for (const statusPath of possiblePaths) {
+          try {
+            const statusContent = await fs.readFile(statusPath, 'utf-8');
+            const status = JSON.parse(statusContent);
+            if (status.projectPath) {
+              projectPath = status.projectPath;
+              this.logger.info(`Found projectPath in status.json: ${projectPath}`);
+              break;
+            }
+          } catch {
+            // Continue to next path
+          }
+        }
+      }
       
       // Validate inputs
       if (!params.oldTag || !params.newTag) {
@@ -43,22 +68,22 @@ export class OrchestratorTool {
       };
 
       // Use the bundled orchestrator prompt
-      let expandedPrompt = ORCHESTRATOR_PROMPT;
+      let executorPrompt = SDK_UPGRADE_ORCHESTRATOR_PROMPT;
       
       // Replace variables in the prompt with actual values
       for (const [key, value] of Object.entries(config)) {
-        expandedPrompt = expandedPrompt.replace(new RegExp(`\\$${key}`, 'g'), value);
-        expandedPrompt = expandedPrompt.replace(new RegExp(`\\$\{${key}\}`, 'g'), value);
+        executorPrompt = executorPrompt.replace(new RegExp(`\\$${key}`, 'g'), value);
+        executorPrompt = executorPrompt.replace(new RegExp(`\\$\{${key}\}`, 'g'), value);
       }
 
-      this.logger.info(`Prepared orchestrator for upgrade: ${params.oldTag} → ${params.newTag}`);
+      this.logger.info(`Prepared state machine executor for upgrade: ${params.oldTag} → ${params.newTag}`);
 
       // Return the prompt for Claude to execute in main context
       return {
         success: true,
-        prompt: expandedPrompt,
+        prompt: executorPrompt,
         config: {
-          instruction: `You are now the SDK Upgrade Orchestrator. Execute the FSM workflow defined above to upgrade from ${params.oldTag} to ${params.newTag}. You can spawn specialized subagents like polkadot-bug-fixer and polkadot-tests-fixer as needed during the workflow.`,
+          instruction: `You are now the SDK Upgrade State Machine Executor. Follow the workflow defined above to upgrade from ${params.oldTag} to ${params.newTag}. You will spawn the @fsm-evaluator subagent repeatedly to determine state transitions and execute the pending steps it provides.`,
           projectPath,
           oldTag: params.oldTag,
           newTag: params.newTag

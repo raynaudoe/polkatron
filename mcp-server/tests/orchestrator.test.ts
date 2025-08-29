@@ -35,7 +35,7 @@ describe('OrchestratorTool', () => {
 
       expect(result.success).toBe(true);
       expect(result.prompt).toBeDefined();
-      expect(result.prompt).toContain('SDK Upgrade Orchestrator');
+      expect(result.prompt).toContain('SDK Upgrade State Machine Executor');
       expect(result.config?.oldTag).toBe('polkadot-stable2407');
       expect(result.config?.newTag).toBe('polkadot-stable2409');
     });
@@ -91,7 +91,7 @@ describe('OrchestratorTool', () => {
       });
 
       expect(result.success).toBe(true);
-      expect(result.config?.instruction).toContain('SDK Upgrade Orchestrator');
+      expect(result.config?.instruction).toContain('SDK Upgrade State Machine Executor');
       expect(result.config?.instruction).toContain('old-version');
       expect(result.config?.instruction).toContain('new-version');
       expect(result.config?.projectPath).toBe('/custom/path');

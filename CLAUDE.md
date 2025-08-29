@@ -4,196 +4,209 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-The SDK Upgrader is an automated tool that upgrades Polkadot SDK dependencies using AI agents to handle breaking changes. It employs a Finite State Machine (FSM) orchestrator with specialized agents for fixing compilation errors and test failures.
+Automated Polkadot SDK upgrade tool using AI agents to handle breaking changes. The system uses a stateless FSM architecture with an MCP server that bundles all prompts internally, preventing context pollution through clean state machine evaluation.
 
 ## Essential Commands
 
-### Running Upgrades
+### MCP Server Operations
 ```bash
-# Full upgrade process
+# Build and test MCP server
+cd mcp-server
+npm run build           # Build the MCP server
+npm test               # Run tests
+npm run dev            # Development mode with watch
+
+# Register MCP server with Claude
+claude mcp add --scope user sdk-upgrader stdio://$(pwd)/dist/index.js
+claude mcp list        # Verify installation
+```
+
+### Running SDK Upgrades
+```bash
+# Via MCP (recommended)
+# First: "Use initialize to set up required files"
+# Then: "Use sdk_upgrade with oldTag='polkadot-stable2407' and newTag='polkadot-stable2410'"
+
+# Via Make targets (legacy)
 make run-upgrade OLD_TAG=polkadot-stable2407 NEW_TAG=polkadot-stable2410
+make install-agents    # Install agents to .claude/agents/
+```
 
-# Individual phases
-./scripts/scout.sh polkadot-stable2410              # Download PR artifacts
-./scripts/runner.sh polkadot-stable2407 polkadot-stable2410  # Execute upgrade
+### Development & Testing
+```bash
+# Check compilation errors
+./scripts/check_build.sh              # Outputs JSON to /tmp/cargo_messages_*.json
+./scripts/check_test_build.sh         # Check test compilation
 
-# Install agents for Claude Code
-make install-agents
+# Run specific Rust tests
+cargo test --package <module> <test_name> -- --exact --nocapture
+
+# Scout PR artifacts manually
+./scripts/scout.sh polkadot-stable2410
 ```
 
 ### Docker Development
 ```bash
-make docker-build    # Build container
-make docker-rebuild  # Rebuild without cache
-make docker-run      # Run upgrade in container
-make docker-logs     # View logs
-make docker-stop     # Stop container
-make docker-down     # Stop and remove container
-make docker-restart  # Restart container
-```
-
-### Testing & Validation
-```bash
-# Check compilation errors (outputs JSON to /tmp/cargo_messages_*.json)
-./scripts/check_build.sh
-
-# Check test compilation (outputs JSON to /tmp/cargo_test_messages_*.json)
-./scripts/check_test_build.sh
-
-# Run cargo check with JSON output
-cargo check --all-targets --message-format=json
-
-# Run single test
-cargo test --package <module> <test_name> -- --exact --nocapture
+make docker-build      # Build container
+make docker-run        # Run and exec into container
+make docker-logs       # View logs
+make docker-restart    # Full restart
 ```
 
 ## Architecture
 
-### Core Flow
-1. **Scout Phase** (`scripts/scout.sh`): Downloads PR artifacts to `resources/scout/polkadot-sdk-<NEW_TAG>/`
-   - Fetches release notes and PR descriptions/diffs
-   - Stores in `pr-<number>/description.md` and `pr-<number>/patch.diff`
-2. **FSM Orchestrator** (`scripts/runner.sh`): Executes state machine from `prompts/orchestrator.yaml`
-   - Max iterations: 40 (configurable via MAX_ITERATIONS)
-   - Tracks progress in `output/status.json`
-3. **Error Grouping** (`scripts/error_grouper.py`): Groups errors dynamically by error code (E0308, E0502, etc.)
-   - Primary grouping: error code
-   - Secondary context: symbol extraction from error messages
-   - Max errors per group: 10 (configurable)
-4. **AI Agents**: Fix errors based on grouped symbols
-   - `@polkadot-bug-fixer`: Compilation errors (uses Serena MCP + rust-docs)
-   - `@polkadot-tests-fixer`: Test failures (module-based grouping)
+### Three-Layer Execution Model
+```
+MCP Server (sdk_upgrade)
+    ↓
+SDK Upgrade Orchestrator (Main Agent)
+    ↓ (spawns in loop)
+FSM Evaluator (Stateless Subagent)
+```
+
+**Key Design**: The FSM evaluator starts fresh each invocation, preventing context pollution. It reads `status.json`, evaluates the current state, outputs `pending_steps`, then exits. The orchestrator executes these steps and repeats.
 
 ### State Machine Flow
 ```
-INIT → UPDATE_DEPS → CHECK_ERRORS → EXECUTE → SPAWN → UPDATE → CHECK_ERRORS (loop)
-                           ↓                                         ↓
-                    TEST_WORKSPACE → CHECK_TESTS → EXECUTE_TEST_FIX → SPAWN_TEST_FIXER
-                           ↓
-                      COMPLETE or ERROR_REPORT/TEST_ERROR_REPORT (on max iterations)
+INIT → CHECK_SCOUT → UPDATE_DEPS → CHECK_ERRORS → EXECUTE → SPAWN → UPDATE
+         ↓                                ↓
+    (scout.sh)                   TEST_WORKSPACE → CHECK_TESTS → EXECUTE_TEST_FIX
+                                         ↓
+                                    COMPLETE or ERROR_REPORT
 ```
 
-### Key Design Patterns
+### Agent Architecture
 
-#### Collaborative Learning
-Agents share knowledge through `resources/error_recovery_handbook.md`:
-- Each successful fix is appended with symbol indexing
-- Format: `### SYMBOL: error_type` followed by solution
-- Agents check handbook before attempting new fixes
+**Bundled in MCP Server** (`mcp-server/src/`):
+- `orchestratorPrompt.ts`: Main orchestrator that executes steps
+- `fsmEvaluatorPrompt.ts`: Stateless FSM evaluator 
+- `initializeTool.ts`: Deploys all agents including fsm-evaluator
 
-#### Error Grouping Strategy
-- Primary grouping by Rust error code (E0308, E0502, etc.) for better accuracy
-- Secondary grouping by symbol within each error code for context
-- Max 10 errors per group (configurable via `max_per_group`)
-- Sorts groups by frequency (most common errors first)
-- Handles both JSON (cargo check) and text (cargo test) output
+**Deployed Agents** (`.claude/agents/`):
+- `polkadot-bug-fixer`: Fixes compilation errors by symbol groups
+- `polkadot-tests-fixer`: Fixes test failures by module
+- `fsm-evaluator`: Pure state machine evaluator
 
-#### Circuit Breaker Pattern
-- Prevents infinite loops by detecting repeated errors
-- Triggers after 5 identical error iterations
-- Agent exits with code 99 for graceful shutdown
-
-#### Agent MCP Tool Integration
-- **Serena MCP**: Semantic code analysis and editing (must switch to "editing" mode)
-- **rust-docs MCP**: Documentation lookups for Polkadot SDK APIs
-- Agents MUST use these tools for every fix (not optional)
-
-### Agent Input Flexibility
-Agents accept both natural language and structured JSON:
-```bash
-# Natural language
-"fix the xcm crate errors"
-
-# Structured JSON
-{"file": "pallets/xcm/src/lib.rs", "line": 42, "error_code": "E0308"}
+### Error Grouping Strategy
+```python
+# scripts/error_grouper.py
+- Primary: Group by Rust error code (E0308, E0502)
+- Secondary: Extract symbols from error messages
+- Max 10 errors per group (configurable)
+- Sorts by frequency for efficiency
 ```
 
-## Troubleshooting Upgrade Failures
+### Knowledge Persistence
 
-### Check Current State
-```bash
-cat output/status.json  # View FSM state and error groups
+**Error Recovery Handbook** (`resources/error_recovery_handbook.md`):
+```markdown
+### SYMBOL: error_type
+- **Error**: Description
+- **Fix**: Solution applied
+- **Confidence**: 0.0-1.0
+- **Context**: Additional info
 ```
 
-### Debug Build Failures
-1. Review error groups in `output/status.json`
-2. Check `resources/error_recovery_handbook.md` for existing solutions
-3. Examine `output/UPGRADE_REPORT_*.md` for applied fixes
-4. Verify error grouping logic in `scripts/error_grouper.py`
+**Status Tracking** (`output/status.json`):
+```json
+{
+  "current_state": "CHECK_ERRORS",
+  "pending_steps": [],
+  "execution_context": {
+    "variables": {},
+    "last_error": null
+  },
+  "error_groups": [],
+  "iteration": 0
+}
+```
 
-### Debug Test Failures
-1. Check test groups in `output/status.json`
-2. Review `output/test_report_*.md` for test fix attempts
-3. Examine agent logs in stderr output
+## Critical Implementation Details
 
-### Common Issues
-- **Cargo check loops**: Circuit breaker prevents infinite loops (exit code 99)
-- **base64ct conflicts**: MUST run `cargo update -p base64ct --precise 1.7.3` (see handbook mandatory fixes)
-- **Trait reorganization**: Scout artifacts contain migration mappings in `pr-*/patch.diff`
-- **Import errors**: Check `common_migrations.yaml` for trait migrations (Currency→Fungible, etc.)
-- **Version conflicts**: Run `cargo tree -i <crate_name>` to identify dependency issues
+### MCP Server Integration
+- All prompts bundled in TypeScript files (no external YAML/MD reading)
+- `orchestratorTool.ts` returns bundled prompt for main context execution
+- `initializeTool.ts` creates all required agents and directories
+
+### Circuit Breaker Pattern
+- Detects repeated errors after 5 identical iterations
+- Exit code 99 for graceful shutdown
+- Prevents infinite fix loops
+
+### Agent Tool Requirements
+- **Serena MCP**: Must switch to "editing" mode first
+- **rust-docs MCP**: For Polkadot SDK API lookups
+- Both tools are mandatory for every fix attempt
 
 ## Modifying the System
 
-### Update FSM Workflow
-Edit `prompts/orchestrator.yaml`:
-- Modify state transitions
-- Adjust iteration limits (default: 40)
-- Change error thresholds
+### Update FSM Logic
+1. Edit `mcp-server/src/fsmEvaluatorPrompt.ts` (bundled version)
+2. Edit `agents/fsm-evaluator.md` (local version)
+3. Rebuild: `cd mcp-server && npm run build`
+4. Reinstall agents: `make install-agents`
+
+### Add New Error Patterns
+Edit `scripts/error_grouper.py`:
+- Modify `extract_symbols()` for better symbol detection
+- Adjust `group_errors()` for new grouping strategies
+- Update regex patterns in `parse_cargo_json()`
 
 ### Enhance Agent Capabilities
-Edit agent specifications in `agents/`:
-- Add new error patterns
-- Improve fix strategies
-- Update confidence scoring logic
-
-### Improve Error Grouping
-Modify `scripts/error_grouper.py`:
-- Refine symbol extraction patterns
-- Add special case handling
-- Improve Rust version detection
+1. Update bundled versions in `mcp-server/src/`
+2. Update local versions in `agents/`
+3. Rebuild MCP server
+4. Test with small error samples first
 
 ## Output Artifacts
 
-Generated in `output/` directory:
-- `status.json`: Real-time FSM state and progress
-- `UPGRADE_REPORT_*.md`: All fixes applied with confidence scores
-- `test_report_*.md`: Test fixing details
-- `error_summary_*.md`: Unfixed compilation errors (if any remain)
-- `test_error_summary_*.md`: Unfixed test failures (if any remain)
+Generated in `output/`:
+- `status.json`: Current FSM state and pending steps
+- `UPGRADE_REPORT_*.md`: All fixes with confidence scores
+- `test_report_*.md`: Test fix attempts
+- `error_summary_*.md`: Unfixed compilation errors
+- `test_error_summary_*.md`: Unfixed test failures
 
-## Key Files & Directories
+## Environment Variables
 
-### Configuration Files
-- `prompts/orchestrator.yaml`: FSM state machine definition
-- `resources/common_migrations.yaml`: Common SDK migration patterns
-- `resources/error_recovery_handbook.md`: Proven fixes database (SYMBOL-indexed)
-- `docker/dev-compose.yml`: Docker setup with Serena MCP integration
-
-### Critical Environment Variables
 ```bash
-PROJECT_ROOT       # Git repository root
-STATUS_FILE        # output/status.json
-UPGRADE_REPORT_PATH # output/UPGRADE_REPORT_${NEW_TAG}.md
-TEST_REPORT_PATH   # output/test_report_${NEW_TAG}.md
-MAX_ITERATIONS     # Default: 40
-SDK_BRANCH         # Branch name without "polkadot-" prefix
+PROJECT_ROOT        # Repository root
+STATUS_FILE         # output/status.json
+MAX_ITERATIONS      # Default: 40
+SDK_BRANCH          # Branch without "polkadot-" prefix
+SCOUT_DIR           # resources/scout/polkadot-sdk-${NEW_TAG}
+ERROR_GROUPER_PATH  # scripts/error_grouper.py
 ```
 
-## Performance Targets
+## Common Issues & Solutions
 
-- Iterations: < 20 for typical upgrades
-- Confidence scores: > 0.8 for majority of fixes
-- Success rate: 100% autonomous completion
-- No circuit breaker triggers
+**MCP Tool Not Found**:
+```bash
+claude mcp remove sdk-upgrader
+claude mcp add --scope user sdk-upgrader stdio://$(pwd)/mcp-server/dist/index.js
+```
 
-## Continuous Improvement
+**Scout Artifacts Missing**:
+- FSM now includes CHECK_SCOUT state
+- Automatically runs `scripts/scout.sh` if needed
+- Manual: `./scripts/scout.sh polkadot-stable2410`
 
-Update this file when:
-- FSM states or transitions change
-- New agent capabilities are added
-- Error grouping strategies evolve
-- Performance patterns emerge
-- Circuit breaker thresholds need adjustment
+**Cargo Check Loops**:
+- Circuit breaker triggers after 5 iterations
+- Check `output/status.json` for repeated error groups
+- Manual fix: `cargo update -p base64ct --precise 1.7.3`
 
-Mark updates with: **CLAUDE.MD UPDATED 🚀**
+**Agent Not Found Errors**:
+- Run `make install-agents` to deploy all agents
+- Verify `.claude/agents/` contains all three agents
+- Check agent names match exactly (no "error-fixer")
+
+## Performance Expectations
+
+- Typical upgrade: < 20 iterations
+- Confidence scores: > 0.8 for most fixes
+- Scout download: ~2-5 minutes depending on release size
+- Build check: ~30-60 seconds per iteration
+- Test phase: Similar iteration count as build phase
+
+**CLAUDE.MD UPDATED 🚀**

@@ -1,6 +1,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import winston from 'winston';
+import { FSM_EVALUATOR_AGENT } from './fsmEvaluatorPrompt.js';
 
 // Bundled subagent definitions
 const POLKADOT_BUG_FIXER = `---
@@ -489,23 +490,30 @@ export class InitializeTool {
       
       this.logger.info(`Initializing project at: ${projectPath}`);
 
-      // Check if already initialized
-      const agentPath = path.join(projectPath, '.claude/agents/polkadot-bug-fixer.md');
+      // Check if already initialized by looking for status.json
+      const statusPath = path.join(projectPath, 'output/status.json');
       try {
-        await fs.access(agentPath);
-        return {
-          success: true,
-          message: 'Project already initialized',
-          created: []
-        };
+        await fs.access(statusPath);
+        const statusContent = await fs.readFile(statusPath, 'utf-8');
+        const status = JSON.parse(statusContent);
+        
+        // If status.json exists and has projectPath, project is already initialized
+        if (status.projectPath) {
+          return {
+            success: true,
+            message: `Project already initialized at ${status.projectPath}`,
+            created: []
+          };
+        }
       } catch {
-        // Not initialized, continue
+        // Not initialized or no status.json, continue
       }
 
       // Create directory structure
       const directories = [
         '.claude/agents',
         'output',
+        'prompts',
         'resources/scout',
         'scripts'
       ];
@@ -520,7 +528,8 @@ export class InitializeTool {
       // Write subagent files
       const agents = [
         { name: 'polkadot-bug-fixer.md', content: POLKADOT_BUG_FIXER },
-        { name: 'polkadot-tests-fixer.md', content: POLKADOT_TESTS_FIXER }
+        { name: 'polkadot-tests-fixer.md', content: POLKADOT_TESTS_FIXER },
+        { name: 'fsm-evaluator.md', content: FSM_EVALUATOR_AGENT }
       ];
 
       for (const agent of agents) {
@@ -559,6 +568,23 @@ export class InitializeTool {
         created.push(`SCRIPT: scripts/${script.name}`);
         this.logger.info(`Created script: ${script.name}`);
       }
+
+      // Create initial status.json with projectPath
+      const initialStatusPath = path.join(projectPath, 'output', 'status.json');
+      const initialStatus = {
+        projectPath: projectPath,
+        current_state: 'INIT',
+        pending_steps: [],
+        execution_context: {
+          variables: {},
+          last_error: null
+        },
+        error_groups: [],
+        iteration: 0
+      };
+      await fs.writeFile(initialStatusPath, JSON.stringify(initialStatus, null, 2), 'utf-8');
+      created.push('FILE: output/status.json');
+      this.logger.info('Created initial status.json with projectPath');
 
       // Create .gitignore in project root to ignore the entire output directory
       const gitignorePath = path.join(projectPath, '.gitignore');

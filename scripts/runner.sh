@@ -1,9 +1,9 @@
 #!/usr/bin/env zsh
 #
-# runner.sh — SDK Upgrade Runner for v2
+# runner.sh — DEPRECATED - Use MCP sdk_upgrade command instead
 #
-# Usage:
-#   make run-upgrade OLD_TAG=polkadot-stable2407 NEW_TAG=polkadot-stable2410
+# This script is replaced by the MCP integration. Use:
+#   claude "Use sdk_upgrade with oldTag='polkadot-stable2407' and newTag='polkadot-stable2410'"
 #
 set -euo pipefail
 
@@ -25,7 +25,7 @@ PROMPT_DIR="${PROJECT_ROOT}"
 OUTPUT_DIR="${PROJECT_ROOT}/output"
 RESOURCES_DIR="${PROJECT_ROOT}/resources"
 SCOUT_DIR="${RESOURCES_DIR}/scout/polkadot-sdk-${NEW_TAG}"
-PROMPT_FILE="${PROJECT_ROOT}/prompts/orchestrator.yaml"
+PROMPT_FILE="${PROJECT_ROOT}/prompts/sdk-upgrade-orchestrator.yaml" # Updated path
 ERROR_GROUPER_PATH="${PROJECT_ROOT}/scripts/error_grouper.py"
 
 # Check prerequisites
